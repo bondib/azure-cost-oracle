@@ -7,6 +7,7 @@ export interface AzureResource {
 
 export interface ResourcePricing extends AzureResource {
   pricing: {
+    noInfo: boolean;
     retailPrice: number;
     unitPrice: number;
     currencyCode: string;

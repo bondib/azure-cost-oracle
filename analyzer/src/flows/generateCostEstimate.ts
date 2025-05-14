@@ -36,7 +36,7 @@ export async function generateCostEstimate(resources: ResourcePricing[]): Promis
   const client = ModelClient(endpoint, new AzureKeyCredential(apiKey));
 
   const resourcesJson = JSON.stringify(costEstimate, null, 2);
-  const prompt = `You are an expert Azure FinOps analyst. Generate a human-friendly cost estimate report for the following Azure resources. Include a summary of total monthly cost, breakdown by resource type, and any potential cost optimization recommendations.\n\nResource and pricing details:\n${resourcesJson}\n\nFormat your response as a professional report with sections for Summary, Detailed Breakdown, and Recommendations.\n\nIMPORTANT: Return your response as valid, styled HTML (using <h2>, <h3>, <ul>, <li>, <table>, etc.) that can be rendered directly in a web browser. Do not use Markdown or RST. Do not include any explanations or text outside the HTML.`;
+  const prompt = `You are an expert Azure FinOps analyst. Generate a human-friendly cost estimate report for the following Azure resources. Include a summary of total monthly cost, breakdown by resource type, and any potential cost optimization recommendations. If the resource has no pricing information (noInfo:true), try to provide estimate by yourself - but mention it's your estimation! \n\nResource and pricing details:\n${resourcesJson}\n\nFormat your response as a professional report with sections for Summary, Detailed Breakdown, and Recommendations.\n\nIMPORTANT: Return your response as valid, styled HTML (using <h2>, <h3>, <ul>, <li>, <table>, etc.) that can be rendered directly in a web browser. Do not use Markdown or RST. Do not include any explanations or text outside the HTML.`;
 
   try {
     const response = await client.path("/chat/completions").post({

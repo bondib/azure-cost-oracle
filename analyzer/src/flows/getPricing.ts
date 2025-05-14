@@ -31,6 +31,7 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
     return resources.map(resource => ({
       ...resource,
       pricing: {
+        noInfo: true,
         retailPrice: 0,
         unitPrice: 0,
         currencyCode: "USD",
@@ -76,6 +77,7 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
         resourcesWithPricing.push({
           ...resource,
           pricing: {
+            noInfo: false,
             retailPrice: pricing.retailPrice,
             unitPrice: pricing.unitPrice,
             currencyCode: pricing.currencyCode,
@@ -87,6 +89,7 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
         resourcesWithPricing.push({
           ...resource,
           pricing: {
+            noInfo: true,
             retailPrice: 0,
             unitPrice: 0,
             currencyCode: "USD",
@@ -101,6 +104,7 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
       resourcesWithPricing.push({
         ...resource,
         pricing: {
+          noInfo: true,
           retailPrice: 0,
           unitPrice: 0,
           currencyCode: "USD",

@@ -78,6 +78,9 @@ You can see the agents architecture at https://www.mermaidchart.com/play#pako:eN
    MCP_URL="http://localhost:8000/retail-prices/mcp/sse"
    MCP_MODE="real"
    ```
+
+4. Enjoy ! (UI at localhost:3000)
+
 ## Authentication
 
 The application uses Azure OpenAI SDK v2.0.0 and supports two authentication methods:
