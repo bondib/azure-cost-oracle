@@ -14,10 +14,12 @@ function getInferenceClient() {
   return ModelClient(endpoint, new AzureKeyCredential(apiKey));
 }
 
-export async function generateMcpFilter(resource: any, filterSchema: any): Promise<any> {
+export async function generateMcpFilter(resource: any, filterSchema: any, allowSkuName: boolean = false): Promise<any> {
   const filterSchemaDescription = typeof filterSchema === 'string' ? filterSchema : JSON.stringify(filterSchema, null, 2);
   const client = getInferenceClient();
-  const prompt = `You are an expert in Azure pricing APIs. Here is the MCP filter schema description (as JSON Schema):\n\n${filterSchemaDescription}\n\nGiven the following resource:\n${JSON.stringify(resource, null, 2)}\n\nGenerate the best possible MCP filter (as a JSON object) to get the price for this resource. Only output the JSON object.`;
+  const prompt = `You are an expert in Azure pricing APIs. We have the following MCP filter schema description (as JSON Schema):\n\n***${filterSchemaDescription}***\n\nGiven the following resource:\n${JSON.stringify(resource, null, 2)}\n\nGenerate a MINIMAL filter (as a JSON object) that we will invoke to search for the pricing to get the price for this resource. ${allowSkuName ? "" : "DO NOT USE skuName in the filter! "}Initially, only use the following fields to construct the filter: "armSkuName", "armRegionName", and "serviceName". Only output the JSON object.`;
+
+  console.log("Prompt: ", prompt);
 
   const response = await client.path("/chat/completions").post({
     body: {

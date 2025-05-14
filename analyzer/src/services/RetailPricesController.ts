@@ -60,6 +60,13 @@ export class RetailPricesController {
         name: "get_retail_prices",
         arguments: filter
       });
+
+      if(result.content && result.content.length > 0) {
+        const text = result.content[0]?.text;
+        if(text) {
+          return JSON.parse(text);
+        }
+      }
       return result;
     } catch (error) {
       this.context.error(`Error calling retail prices tool: ${error}`);

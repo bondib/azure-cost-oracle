@@ -17,32 +17,187 @@
     <div class="field">
       <label class="label">Paste your ARM/Terraform or design document:</label>
       <div id="editor">{
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "resources": [
-    {
-      "type": "Microsoft.Compute/virtualMachines",
-      "apiVersion": "2021-03-01",
-      "name": "myVM",
-      "location": "eastus",
-      "properties": {
-        "hardwareProfile": {
-          "vmSize": "Standard_D2s_v3"
+        "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+        "contentVersion": "1.0.0.0",
+        "parameters": {
+          "adminUsername": {
+            "type": "string",
+            "metadata": {
+              "description": "Admin username for VMs"
+            }
+          },
+          "adminPassword": {
+            "type": "securestring",
+            "metadata": {
+              "description": "Admin password for VMs"
+            }
+          },
+          "sqlAdminUsername": {
+            "type": "string"
+          },
+          "sqlAdminPassword": {
+            "type": "securestring"
+          }
+        },
+        "variables": {
+          "location": "eastus2",
+          "vnetName": "myVNet",
+          "subnetName": "default",
+          "addressPrefix": "10.0.0.0/16",
+          "subnetPrefix": "10.0.0.0/24",
+          "vmNames": ["vm1", "vm2", "vm3"],
+          "vmSizes": ["Standard_B1s", "Standard_B2s", "Standard_B4ms"],
+          "sqlServerName": "[concat('sqlserver', uniqueString(resourceGroup().id))]",
+          "sqlDbName": "mydb",
+          "appServicePlanName": "myAppServicePlan",
+          "webAppName": "[concat('webapp', uniqueString(resourceGroup().id))]"
+        },
+        "resources": [
+          {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2021-03-01",
+            "name": "[variables('vnetName')]",
+            "location": "[variables('location')]",
+            "properties": {
+              "addressSpace": {
+                "addressPrefixes": ["[variables('addressPrefix')]"]
+              },
+              "subnets": [
+                {
+                  "name": "[variables('subnetName')]",
+                  "properties": {
+                    "addressPrefix": "[variables('subnetPrefix')]"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2021-02-01",
+            "name": "[concat(variables('vmNames')[copyIndex()], '-nic')]",
+            "location": "[variables('location')]",
+            "copy": {
+              "name": "nicCopy",
+              "count": 3
+            },
+            "dependsOn": ["[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"],
+            "properties": {
+              "ipConfigurations": [
+                {
+                  "name": "ipconfig1",
+                  "properties": {
+                    "subnet": {
+                      "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+                    },
+                    "privateIPAllocationMethod": "Dynamic"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2021-07-01",
+            "name": "[variables('vmNames')[copyIndex()]]",
+            "location": "[variables('location')]",
+            "copy": {
+              "name": "vmCopy",
+              "count": 3
+            },
+            "dependsOn": ["nicCopy"],
+            "properties": {
+              "hardwareProfile": {
+                "vmSize": "[variables('vmSizes')[copyIndex()]]"
+              },
+              "osProfile": {
+                "computerName": "[variables('vmNames')[copyIndex()]]",
+                "adminUsername": "[parameters('adminUsername')]",
+                "adminPassword": "[parameters('adminPassword')]"
+              },
+              "storageProfile": {
+                "imageReference": {
+                  "publisher": "MicrosoftWindowsServer",
+                  "offer": "WindowsServer",
+                  "sku": "2019-Datacenter",
+                  "version": "latest"
+                },
+                "osDisk": {
+                  "createOption": "FromImage"
+                }
+              },
+              "networkProfile": {
+                "networkInterfaces": [
+                  {
+                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('vmNames')[copyIndex()], '-nic'))]"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "Microsoft.Sql/servers",
+            "apiVersion": "2022-05-01-preview",
+            "name": "[variables('sqlServerName')]",
+            "location": "[variables('location')]",
+            "properties": {
+              "administratorLogin": "[parameters('sqlAdminUsername')]",
+              "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+              "version": "12.0"
+            },
+            "resources": [
+              {
+                "type": "databases",
+                "apiVersion": "2022-05-01-preview",
+                "name": "[variables('sqlDbName')]",
+                "location": "[variables('location')]",
+                "dependsOn": ["[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"],
+                "properties": {
+                  "collation": "SQL_Latin1_General_CP1_CI_AS",
+                  "maxSizeBytes": "2147483648",
+                  "sampleName": "AdventureWorksLT",
+                  "edition": "Basic"
+                }
+              }
+            ]
+          },
+          {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2022-03-01",
+            "name": "[variables('appServicePlanName')]",
+            "location": "[variables('location')]",
+            "sku": {
+              "name": "B1",
+              "tier": "Basic",
+              "size": "B1",
+              "capacity": 1
+            },
+            "properties": {
+              "reserved": false
+            }
+          },
+          {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2022-03-01",
+            "name": "[variables('webAppName')]",
+            "location": "[variables('location')]",
+            "dependsOn": ["[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"],
+            "properties": {
+              "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]"
+            }
+          }
+        ],
+        "outputs": {
+          "webAppUrl": {
+            "type": "string",
+            "value": "[concat('https://', variables('webAppName'), '.azurewebsites.net')]"
+          },
+          "sqlServerName": {
+            "type": "string",
+            "value": "[variables('sqlServerName')]"
+          }
         }
-      }
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "apiVersion": "2021-04-01",
-      "name": "mystorageaccount",
-      "location": "eastus",
-      "sku": {
-        "name": "Standard_LRS"
-      },
-      "kind": "StorageV2"
-    }
-  ]
-}</div>
+      }</div>
     </div>
     <div class="field is-grouped is-grouped-right">
       <p class="control">

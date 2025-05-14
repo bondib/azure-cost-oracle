@@ -56,11 +56,11 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
       console.log(`[AI MCP Filter Attempt ${attempt}]`, JSON.stringify(filter, null, 2));
       console.log(`[MCP Response Attempt ${attempt}]`, JSON.stringify(pricingData, null, 2));
 
-      while ((!pricingData.items || pricingData.items.length === 0) && attempt < MAX_MCP_FILTER_ATTEMPTS) {
+      while ((!pricingData.data || pricingData.data.length === 0) && attempt < MAX_MCP_FILTER_ATTEMPTS) {
         attempt++;
         // Give feedback to the AI about the failure and all previous filters
-        const feedback = `The previous filter returned zero results from the MCP API. Please try to create a different filter for this resource. Here were all previous filters used: ${JSON.stringify(allFilters, null, 2)}`;
-        filter = await generateMcpFilter(resource, JSON.stringify(inputSchema, null, 2) + "\n" + feedback);
+        const feedback = `The previous filter returned zero results from the MCP API. Please try to create a different filter for this resource. Less is more! Previous filters used that returned zero results: ${JSON.stringify(allFilters, null, 2)}`;
+        filter = await generateMcpFilter(resource, JSON.stringify(inputSchema, null, 2) + "\n" + feedback, attempt >= 2);
         pricingData = await controller.callRetailPricesTool(client, filter);
         lastFilter = filter;
         lastResponse = pricingData;
@@ -69,8 +69,9 @@ export async function getPricingForResources(resources: AzureResource[]): Promis
         console.log(`[MCP Response Attempt ${attempt}]`, JSON.stringify(pricingData, null, 2));
       }
 
-      if (pricingData.items && pricingData.items.length > 0) {
-        const pricing = pricingData.items[0];
+      if (pricingData.data && pricingData.data.length > 0) {
+        // todo: handle multiple pricing data
+        const pricing = pricingData.data[0];
 
         resourcesWithPricing.push({
           ...resource,
