@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azure FinOps Cost Analyzer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+  <style>
+    #editor { height: 300px; width: 100%; border: 1px solid #ccc; border-radius: 4px; }
+    #response, #error { margin-top: 1em; max-height: 400px; overflow: auto; }
+    .container { max-width: 800px; margin: 2em auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="title has-text-centered">Azure FinOps Cost Analyzer</h1>
+    <div class="field">
+      <label class="label">Paste your ARM/Terraform or design document:</label>
+      <div id="editor">{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-03-01",
+      "name": "myVM",
+      "location": "eastus",
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "Standard_D2s_v3"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2021-04-01",
+      "name": "mystorageaccount",
+      "location": "eastus",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2"
+    }
+  ]
+}</div>
+    </div>
+    <div class="field is-grouped is-grouped-right">
+      <p class="control">
+        <button id="analyzeBtn" class="button is-primary">Analyze Cost</button>
+      </p>
+    </div>
+    <pre id="consoleOutput" class="box is-hidden" style="background:#222;color:#eee;max-height:200px;overflow:auto;"></pre>
+    <div id="response" class="box is-hidden"></div>
+    <div id="error" class="notification is-danger is-hidden"></div>
+  </div>
+  <script src="https://www.unpkg.com/ace-builds@latest/src-noconflict/ace.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    const editor = ace.edit("editor");
+    editor.session.setMode("ace/mode/json");
+    editor.setTheme("ace/theme/github");
+    editor.setOptions({ fontSize: "14px" });
+
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const responseBox = document.getElementById("response");
+    const errorBox = document.getElementById("error");
+
+    analyzeBtn.onclick = async () => {
+      responseBox.classList.add("is-hidden");
+      errorBox.classList.add("is-hidden");
+      const consoleOutput = document.getElementById("consoleOutput");
+      consoleOutput.textContent = "";
+      consoleOutput.classList.remove("is-hidden");
+      let template = editor.getValue();
+      try {
+        JSON.parse(template);
+      } catch (e) {
+        errorBox.textContent = "Invalid JSON: " + e.message;
+        errorBox.classList.remove("is-hidden");
+        consoleOutput.classList.add("is-hidden");
+        return;
+      }
+      analyzeBtn.classList.add("is-loading");
+      // Use SSE for streaming logs and result
+      const evtSource = new EventSourcePolyfill("/analyze/stream", {
+        headers: { "Content-Type": "application/json" },
+        payload: JSON.stringify({ template }),
+        method: "POST"
+      });
+      let resultReceived = false;
+      evtSource.addEventListener("log", (e) => {
+        // Replace \n with <br> for HTML display
+        const html = e.data.replace(/\n/g, "<br>");
+        consoleOutput.innerHTML += html + "<br>";
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      });
+      evtSource.addEventListener("message", (e) => {
+        // Render HTML as-is, do not replace newlines
+        responseBox.innerHTML = e.data;
+        responseBox.classList.remove("is-hidden");
+        resultReceived = true;
+        evtSource.close();
+        analyzeBtn.classList.remove("is-loading");
+      });
+      evtSource.addEventListener("error", (e) => {
+        errorBox.textContent = e.data;
+        errorBox.classList.remove("is-hidden");
+        evtSource.close();
+        analyzeBtn.classList.remove("is-loading");
+      });
+      evtSource.onerror = () => {
+        if (!resultReceived) {
+          errorBox.textContent = "Connection lost or server error.";
+          errorBox.classList.remove("is-hidden");
+        }
+        analyzeBtn.classList.remove("is-loading");
+        evtSource.close();
+      };
+    };
+    // Polyfill for EventSource with POST support
+    // https://github.com/Azure/fetch-event-source (or similar)
+    class EventSourcePolyfill {
+      constructor(url, options) {
+        this.url = url;
+        this.options = options;
+        this.controller = new AbortController();
+        this.listeners = {};
+        this.connect();
+      }
+      connect() {
+        fetch(this.url, {
+          method: this.options.method || "GET",
+          headers: this.options.headers,
+          body: this.options.payload,
+          signal: this.controller.signal,
+        }).then(async (res) => {
+          if (!res.body) return;
+          const reader = res.body.getReader();
+          let buffer = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += new TextDecoder().decode(value);
+            let parts = buffer.split("\n\n");
+            buffer = parts.pop();
+            for (const part of parts) {
+              const lines = part.split("\n");
+              let event = "message";
+              let dataLines = [];
+              for (const line of lines) {
+                if (line.startsWith("event: ")) event = line.slice(7);
+                else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+              }
+              const data = dataLines.join("\n");
+              if (this.listeners[event]) {
+                this.listeners[event].forEach(fn => fn({ data }));
+              }
+            }
+          }
+        });
+      }
+      addEventListener(event, fn) {
+        if (!this.listeners[event]) this.listeners[event] = [];
+        this.listeners[event].push(fn);
+      }
+      close() {
+        this.controller.abort();
+      }
+    }
+  </script>
+</body>
+</html>
