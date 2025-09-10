@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2020-10-01",
+      "name": "delete-resources-script",
+      "location": "[parameters('location')]",
+      "kind": "AzureCLI",
+      "properties": {
+        "azCliVersion": "2.20.0",
+        "timeout": "PT15M",
+        "cleanupPreference": "Always",
+        "retentionInterval": "P1D",
+        "forceUpdateTag": "v1",
+        "scriptContent": "#!/bin/bash\nset -x\n\n# Define the list of resource IDs\nRESOURCE_IDS=( \"/subscriptions/71d39d48-511e-4706-80e5-334b4ef385d1/resourceGroups/BONDI2-DEV/providers/Microsoft.Compute/virtualMachines/DEV3-TEST-VM\" )\n\n# Iterate over the list of resource IDs\nfor RESOURCE_ID in \"${RESOURCE_IDS[@]}\"; do\n  echo \"Deleting resource: $RESOURCE_ID\"\n\n  # Delete the resource\n  az resource delete --ids \"$RESOURCE_ID\"\n\n  # Check if the delete command was successful\n  if [[ $? -eq 0 ]]; then\n    echo \"Successfully deleted resource: $RESOURCE_ID\"\n  else\n    echo \"Failed to delete resource: $RESOURCE_ID\"\n  fi\ndone\n\necho \"Resource deletion process completed.\"\n"
+      }
+    }
+  ]
+}
